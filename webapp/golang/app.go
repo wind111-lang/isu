@@ -32,7 +32,7 @@ var (
 const (
 	postsPerPage  = 20
 	ISO8601Format = "2006-01-02T15:04:05-07:00"
-	UploadLimit   = 5 * 1024 * 1024 // 10mb
+	UploadLimit   = 10 * 1024 * 1024 // 10mb
 )
 
 type User struct {
@@ -66,8 +66,6 @@ type Comment struct {
 	User      User
 }
 
-var u = User{}
-
 func init() {
 	memdAddr := os.Getenv("ISUCONP_MEMCACHED_ADDRESS")
 	if memdAddr == "" {
@@ -87,12 +85,22 @@ func dbInitialize() {
 		"UPDATE users SET del_flg = 1 WHERE id % 50 = 0",
 	}
 
-	for _, sql := range sqls {
-		db.Exec(sql)
+	for i:=0; i<len(sqls); i++ {
+		res, err := db.Exec(sqls[i])
+		if err != nil {
+			log.Print(err)
+			break
+		}
+		
+		affect, _ := res.RowsAffected()
+		if affect == 0 {
+			break
+		}
 	}
 }
 
 func tryLogin(accountName, password string) *User {
+	u := User{}
 	err := db.Get(&u, "SELECT * FROM users WHERE account_name = ? AND del_flg = 0", accountName)
 	if err != nil {
 		return nil
@@ -149,11 +157,11 @@ func getSessionUser(r *http.Request) User {
 		return User{}
 	}
 
-	if u.ID != uid {
-		err := db.Get(&u, "SELECT * FROM `users` WHERE `id` = ?", uid)
-		if err != nil {
-			return User{}
-		}
+	u := User{}
+
+	err := db.Get(&u, "SELECT * FROM `users` WHERE `id` = ?", uid)
+	if err != nil {
+		return User{}
 	}
 
 	return u
@@ -374,7 +382,6 @@ func postRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func getLogout(w http.ResponseWriter, r *http.Request) {
-	u = User{}
 	session := getSession(r)
 	delete(session.Values, "user_id")
 	session.Options = &sessions.Options{MaxAge: -1}
@@ -718,7 +725,7 @@ func postComment(w http.ResponseWriter, r *http.Request) {
 
 	postID, err := strconv.Atoi(r.FormValue("post_id"))
 	if err != nil {
-		log.Fatal("post_idは整数のみです")
+		log.Print("post_idは整数のみです")
 		return
 	}
 
