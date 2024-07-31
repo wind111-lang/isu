@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bufio"
 	crand "crypto/rand"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -198,9 +199,9 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 		}
 
 		// reverse
-		for i, j := 0, len(comments)-1; i < j; i, j = i+1, j-1 {
-			comments[i], comments[j] = comments[j], comments[i]
-		}
+		sort.Slice(comments, func(i, j int) bool {
+			return comments[i].CreatedAt.Before(comments[j].CreatedAt)
+		})
 
 		p.Comments = comments
 
@@ -633,7 +634,7 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	filedata, err := bufio.NewReader(file).Peek(UploadLimit)
+	filedata, err := io.ReadAll(file)
 	if err != nil {
 		log.Print(err)
 		return
