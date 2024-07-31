@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bufio"
 	crand "crypto/rand"
 	"fmt"
 	"html/template"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -633,7 +633,7 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	filedata, err := io.ReadAll(file)
+	filedata, err := bufio.NewReader(file).Peek(UploadLimit)
 	if err != nil {
 		log.Print(err)
 		return
