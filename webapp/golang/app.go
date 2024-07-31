@@ -66,6 +66,8 @@ type Comment struct {
 	User      User
 }
 
+var u = User{}
+
 func init() {
 	memdAddr := os.Getenv("ISUCONP_MEMCACHED_ADDRESS")
 	if memdAddr == "" {
@@ -91,7 +93,6 @@ func dbInitialize() {
 }
 
 func tryLogin(accountName, password string) *User {
-	u := User{}
 	err := db.Get(&u, "SELECT * FROM users WHERE account_name = ? AND del_flg = 0", accountName)
 	if err != nil {
 		return nil
@@ -148,11 +149,11 @@ func getSessionUser(r *http.Request) User {
 		return User{}
 	}
 
-	u := User{}
-
-	err := db.Get(&u, "SELECT * FROM `users` WHERE `id` = ?", uid)
-	if err != nil {
-		return User{}
+	if u.ID != uid {
+		err := db.Get(&u, "SELECT * FROM `users` WHERE `id` = ?", uid)
+		if err != nil {
+			return User{}
+		}
 	}
 
 	return u
@@ -373,6 +374,7 @@ func postRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func getLogout(w http.ResponseWriter, r *http.Request) {
+	u = User{}
 	session := getSession(r)
 	delete(session.Values, "user_id")
 	session.Options = &sessions.Options{MaxAge: -1}
