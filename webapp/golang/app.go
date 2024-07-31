@@ -1,10 +1,10 @@
 package main
 
 import (
-	"bufio"
 	crand "crypto/rand"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -182,7 +181,6 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 	var posts []Post
 
 	for _, p := range results {
-		
 		err := db.Get(&p.CommentCount, "SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?", p.ID)
 		if err != nil {
 			return nil, err
@@ -206,9 +204,9 @@ func makePosts(results []Post, csrfToken string, allComments bool) ([]Post, erro
 		}
 
 		// reverse
-		sort.Slice(comments, func(i, j int) bool {
-			return comments[i].CreatedAt.Before(comments[j].CreatedAt)
-		})
+		for i, j := 0, len(comments)-1; i < j; i, j = i+1, j-1 {
+			comments[i], comments[j] = comments[j], comments[i]
+		}
 
 		p.Comments = comments
 
@@ -642,7 +640,7 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	filedata, err := bufio.NewReader(file).Peek(UploadLimit)
+	filedata, err := io.ReadAll(file)
 	if err != nil {
 		log.Print(err)
 		return
