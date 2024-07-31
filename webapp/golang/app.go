@@ -27,6 +27,7 @@ import (
 var (
 	db    *sqlx.DB
 	store *gsm.MemcacheStore
+	user User
 )
 
 const (
@@ -153,14 +154,14 @@ func getSessionUser(r *http.Request) User {
 		return User{}
 	}
 
-	u := User{}
-
-	err := db.Get(&u, "SELECT * FROM `users` WHERE `id` = ?", uid)
-	if err != nil {
-		return User{}
+	if user.ID != uid {
+		err := db.Get(&user, "SELECT * FROM `users` WHERE `id` = ?", uid)
+	    if err != nil {
+		    return User{}
+	    }
 	}
 
-	return u
+	return user
 }
 
 func getFlash(w http.ResponseWriter, r *http.Request, key string) string {
@@ -378,6 +379,7 @@ func postRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func getLogout(w http.ResponseWriter, r *http.Request) {
+	user = User{}
 	session := getSession(r)
 	delete(session.Values, "user_id")
 	session.Options = &sessions.Options{MaxAge: -1}
