@@ -85,17 +85,8 @@ func dbInitialize() {
 		"UPDATE users SET del_flg = 1 WHERE id % 50 = 0",
 	}
 
-	for i:=0; i<len(sqls); i++ {
-		res, err := db.Exec(sqls[i])
-		if err != nil {
-			log.Print(err)
-			break
-		}
-		
-		affect, _ := res.RowsAffected()
-		if affect == 0 {
-			break
-		}
+	for _, sql := range sqls {
+		db.Exec(sql)
 	}
 }
 
