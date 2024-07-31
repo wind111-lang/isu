@@ -1,10 +1,10 @@
 package main
 
 import (
+	"bufio"
 	crand "crypto/rand"
 	"fmt"
 	"html/template"
-	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -27,6 +27,7 @@ import (
 var (
 	db    *sqlx.DB
 	store *gsm.MemcacheStore
+	user  User
 )
 
 const (
@@ -42,6 +43,11 @@ type User struct {
 	Authority   int       `db:"authority"`
 	DelFlg      int       `db:"del_flg"`
 	CreatedAt   time.Time `db:"created_at"`
+}
+
+type Image struct {
+	ImageData []byte
+	Mime      string
 }
 
 type Post struct {
@@ -91,14 +97,13 @@ func dbInitialize() {
 }
 
 func tryLogin(accountName, password string) *User {
-	u := User{}
-	err := db.Get(&u, "SELECT * FROM users WHERE account_name = ? AND del_flg = 0", accountName)
+	err := db.Get(&user, "SELECT * FROM users WHERE account_name = ? AND del_flg = 0", accountName)
 	if err != nil {
 		return nil
 	}
 
-	if calculatePasshash(u.AccountName, password) == u.Passhash {
-		return &u
+	if calculatePasshash(user.AccountName, password) == user.Passhash {
+		return &user
 	} else {
 		return nil
 	}
@@ -148,17 +153,19 @@ func getSessionUser(r *http.Request) User {
 		return User{}
 	}
 
-	u := User{}
 
-	err := db.Get(&u, "SELECT * FROM `users` WHERE `id` = ?", uid)
-	if err != nil {
-		return User{}
+	if user.ID != uid {
+		err := db.Get(&user, "SELECT * FROM `users` WHERE `id` = ?", uid)
+	    if err != nil {
+		    return User{}
+	    }
 	}
 
-	return u
+	return user
 }
 
 func getFlash(w http.ResponseWriter, r *http.Request, key string) string {
+	user = User{}
 	session := getSession(r)
 	value, ok := session.Values[key]
 
@@ -373,6 +380,7 @@ func postRegister(w http.ResponseWriter, r *http.Request) {
 }
 
 func getLogout(w http.ResponseWriter, r *http.Request) {
+	user = User{}
 	session := getSession(r)
 	delete(session.Values, "user_id")
 	session.Options = &sessions.Options{MaxAge: -1}
@@ -417,22 +425,22 @@ func getIndex(w http.ResponseWriter, r *http.Request) {
 
 func getAccountName(w http.ResponseWriter, r *http.Request) {
 	accountName := r.PathValue("accountName")
-	user := User{}
+	u := User{}
 
-	err := db.Get(&user, "SELECT * FROM `users` WHERE `account_name` = ? AND `del_flg` = 0", accountName)
+	err := db.Get(&u, "SELECT * FROM `users` WHERE `account_name` = ? AND `del_flg` = 0", accountName)
 	if err != nil {
 		log.Print(err)
 		return
 	}
 
-	if user.ID == 0 {
+	if u.ID == 0 {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
 	results := []Post{}
 
-	err = db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `user_id` = ? ORDER BY `created_at` DESC", user.ID)
+	err = db.Select(&results, "SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `user_id` = ? ORDER BY `created_at` DESC", u.ID)
 	if err != nil {
 		log.Print(err)
 		return
@@ -445,14 +453,14 @@ func getAccountName(w http.ResponseWriter, r *http.Request) {
 	}
 
 	commentCount := 0
-	err = db.Get(&commentCount, "SELECT COUNT(*) AS count FROM `comments` WHERE `user_id` = ?", user.ID)
+	err = db.Get(&commentCount, "SELECT COUNT(*) AS count FROM `comments` WHERE `user_id` = ?", u.ID)
 	if err != nil {
 		log.Print(err)
 		return
 	}
 
 	postIDs := []int{}
-	err = db.Select(&postIDs, "SELECT `id` FROM `posts` WHERE `user_id` = ?", user.ID)
+	err = db.Select(&postIDs, "SELECT `id` FROM `posts` WHERE `user_id` = ?", u.ID)
 	if err != nil {
 		log.Print(err)
 		return
@@ -498,7 +506,7 @@ func getAccountName(w http.ResponseWriter, r *http.Request) {
 		CommentCount   int
 		CommentedCount int
 		Me             User
-	}{posts, user, postCount, commentCount, commentedCount, me})
+	}{posts, u, postCount, commentCount, commentedCount, me})
 }
 
 func getPosts(w http.ResponseWriter, r *http.Request) {
@@ -633,7 +641,7 @@ func postIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	filedata, err := io.ReadAll(file)
+	filedata, err := bufio.NewReader(file).Peek(UploadLimit)
 	if err != nil {
 		log.Print(err)
 		return
@@ -678,8 +686,9 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	post := Post{}
-	err = db.Get(&post, "SELECT * FROM `posts` WHERE `id` = ?", pid)
+	image := Image{}
+	
+	err = db.Get(&image, "SELECT imgdata, mime  FROM `posts` WHERE `id` = ?", pid)
 	if err != nil {
 		log.Print(err)
 		return
@@ -687,11 +696,11 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 
 	ext := r.PathValue("ext")
 
-	if ext == "jpg" && post.Mime == "image/jpeg" ||
-		ext == "png" && post.Mime == "image/png" ||
-		ext == "gif" && post.Mime == "image/gif" {
-		w.Header().Set("Content-Type", post.Mime)
-		_, err := w.Write(post.Imgdata)
+	if ext == "jpg" && image.Mime == "image/jpeg" ||
+		ext == "png" && image.Mime == "image/png" ||
+		ext == "gif" && image.Mime == "image/gif" {
+		w.Header().Set("Content-Type", image.Mime)
+		_, err := w.Write(image.ImageData)
 		if err != nil {
 			log.Print(err)
 			return
