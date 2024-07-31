@@ -57,6 +57,11 @@ type Post struct {
 	CSRFToken    string
 }
 
+type Image struct {
+	Imgdata []byte
+	Mime   string
+}
+
 type Comment struct {
 	ID        int       `db:"id"`
 	PostID    int       `db:"post_id"`
@@ -678,8 +683,9 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	post := Post{}
-	err = db.Get(&post, "SELECT * FROM `posts` WHERE `id` = ?", pid)
+	image := Image{}
+
+	err = db.Get(&image, "SELECT imgdata, mime FROM `posts` WHERE `id` = ?", pid)
 	if err != nil {
 		log.Print(err)
 		return
@@ -687,11 +693,11 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 
 	ext := r.PathValue("ext")
 
-	if ext == "jpg" && post.Mime == "image/jpeg" ||
-		ext == "png" && post.Mime == "image/png" ||
-		ext == "gif" && post.Mime == "image/gif" {
-		w.Header().Set("Content-Type", post.Mime)
-		_, err := w.Write(post.Imgdata)
+	if ext == "jpg" && image.Mime == "image/jpeg" ||
+		ext == "png" && image.Mime == "image/png" ||
+		ext == "gif" && image.Mime == "image/gif" {
+		w.Header().Set("Content-Type", image.Mime)
+		_, err := w.Write(image.Imgdata)
 		if err != nil {
 			log.Print(err)
 			return
